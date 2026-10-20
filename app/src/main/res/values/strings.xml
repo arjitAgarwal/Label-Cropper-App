@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Label Cropper</string>
+    <string name="meesho">Meesho</string>
+    <string name="flipkart">Flipkart</string>
+    <string name="desc_meesho">Choose a Meesho shipping-label PDF. Each page\'s shipping label and invoice are cropped and placed side by side on a 5×3in page, ready for a label printer.</string>
+    <string name="desc_flipkart">Choose a Flipkart (E-Kart) shipping-label PDF. You get two files: the labels, cropped tight on their own ~3×5in page each; and the Tax Invoices (when printed below a label), merged two per A4 page.</string>
+    <string name="choose_pdfs">Choose PDF file(s)</string>
+    <string name="crop">Crop</string>
+    <string name="progress_reading">Reading files…</string>
+    <string name="progress_pages">Processing page %1$d of %2$d…</string>
+    <string name="out_meesho">Cropped labels (%1$s, 5×3in)</string>
+    <string name="out_flipkart_labels">Labels (%1$s, ~3×5in)</string>
+    <string name="out_flipkart_invoices">Invoices (%1$s, 2-up A4)</string>
+    <string name="out_flipkart_no_invoices">Invoices (none found in this upload)</string>
+    <string name="save">Save</string>
+    <string name="share">Share</string>
+    <string name="print">Print</string>
+    <string name="share_title">Share PDF</string>
+    <string name="saved">Saved</string>
+    <string name="save_failed">Couldn\'t save the file</string>
+    <string name="error_nothing_cropped">No pages could be cropped. The file(s) didn\'t match the expected layout for the selected platform. If you picked the wrong platform, switch the toggle and try again.</string>
+    <string name="error_memory">Ran out of memory. Try fewer files at once.</string>
+    <string name="offline_note">Runs entirely on your device. Nothing is uploaded anywhere.</string>
+</resources>

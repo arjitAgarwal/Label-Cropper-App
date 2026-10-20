@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Wider screens (tablets, landscape) centre the card in a column no wider than this. -->
+    <dimen name="content_max_width">600dp</dimen>
+    <dimen name="screen_padding">16dp</dimen>
+    <dimen name="card_padding">20dp</dimen>
+</resources>

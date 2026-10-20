@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A shipping label with a barcode, and crop marks at its corners. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M40,34h28a2,2 0,0 1,2 2v36a2,2 0,0 1,-2 2h-28a2,2 0,0 1,-2 -2v-36a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#2F6F4E" android:pathData="M43,39h16v2.5h-16z M43,44h22v2h-22z M43,48h18v2h-18z" />
+    <path android:fillColor="#1C1D1F" android:pathData="M43,56h2v12h-2z M46.5,56h1v12h-1z M49,56h2.5v12h-2.5z M53,56h1v12h-1z M55.5,56h2v12h-2z M59,56h1v12h-1z M61.5,56h1.5v12h-1.5z M64.5,56h0.5v12h-0.5z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2.5" android:strokeLineCap="round" android:pathData="M30,36v-6h6 M78,36v-6h-6 M30,72v6h6 M78,72v6h-6" />
+</vector>

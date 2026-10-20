@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp"
+    android:background="@drawable/output_frame"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/output_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/output_title"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/output_save"
+            style="@style/PrimaryButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/save" />
+
+        <Button
+            android:id="@+id/output_share"
+            style="@style/SecondaryButton"
+            android:layout_width="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/share" />
+
+        <Button
+            android:id="@+id/output_print"
+            style="@style/SecondaryButton"
+            android:layout_width="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/print" />
+    </LinearLayout>
+</LinearLayout>
