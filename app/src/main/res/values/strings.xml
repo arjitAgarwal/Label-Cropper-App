@@ -13,6 +13,9 @@
     <string name="out_flipkart_labels">Labels (%1$s, ~3×5in)</string>
     <string name="out_flipkart_invoices">Invoices (%1$s, 2-up A4)</string>
     <string name="out_flipkart_no_invoices">Invoices (none found in this upload)</string>
+    <string name="view">View</string>
+    <string name="preview_close">Close</string>
+    <string name="preview_failed">Couldn\'t open the file</string>
     <string name="save">Save</string>
     <string name="share">Share</string>
     <string name="print">Print</string>

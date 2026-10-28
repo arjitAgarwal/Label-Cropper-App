@@ -252,6 +252,7 @@ class MainActivity : Activity() {
 
     private inner class OutputCard(private val view: View) {
         private val title: TextView = view.findViewById(R.id.output_title)
+        private val preview: Button = view.findViewById(R.id.output_view)
         private val save: Button = view.findViewById(R.id.output_save)
         private val share: Button = view.findViewById(R.id.output_share)
         private val print: Button = view.findViewById(R.id.output_print)
@@ -265,8 +266,9 @@ class MainActivity : Activity() {
             title.text = label
             title.isEnabled = file != null
             print.setText(R.string.print)
-            for (b in listOf(save, share, print)) b.isEnabled = file != null
+            for (b in listOf(preview, save, share, print)) b.isEnabled = file != null
             if (file == null) return
+            preview.setOnClickListener { PdfPreview.show(this@MainActivity, file, label) }
             save.setOnClickListener { saveAs(file) }
             share.setOnClickListener { share(file) }
             print.setOnClickListener { print(file) }
