@@ -1,10 +1,16 @@
 package com.labelcropper.app
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
@@ -20,6 +26,7 @@ import android.widget.ProgressBar
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import com.labelcropper.core.PrinterLanguage
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -38,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var labelsCard: OutputCard
     private lateinit var invoicesCard: OutputCard
     private lateinit var warnings: TextView
+    private lateinit var printerRow: TextView
 
     private val selected = mutableListOf<Uri>()
     private var platform = Platform.MEESHO
@@ -66,6 +74,9 @@ class MainActivity : Activity() {
         labelsCard = OutputCard(findViewById(R.id.labels_card))
         invoicesCard = OutputCard(findViewById(R.id.invoices_card))
         warnings = findViewById(R.id.warnings)
+        printerRow = findViewById(R.id.printer_row)
+        printerRow.setOnClickListener { if (!busy) showPrinterSettings() }
+        updatePrinterRow()
 
         applySystemBarInsets(findViewById(R.id.root))
 
@@ -271,14 +282,241 @@ class MainActivity : Activity() {
         startActivity(chooser)
     }
 
+    /** Prints to the saved Bluetooth label printer, setting one up on first use. */
     private fun print(file: File) {
+        if (busy) return
+        withBluetooth {
+            val saved = savedPrinter()
+            if (saved != null) printLabels(file, saved) else setUpPrinter(file) { printLabels(file, it) }
+        }
+    }
+
+    private fun systemPrint(file: File) {
         val printManager = getSystemService(Context.PRINT_SERVICE) as PrintManager
         printManager.print(file.nameWithoutExtension, PdfPrintAdapter(file), null)
+    }
+
+    private fun printLabels(file: File, settings: PrinterSettings) {
+        val adapter = bluetoothAdapter() ?: return
+        busy = true
+        updateSelection()
+        progressRow.visibility = View.VISIBLE
+        progressBar.isIndeterminate = true
+        progressText.text = getString(R.string.printing_connecting, settings.name)
+
+        val appContext = applicationContext
+        worker.execute {
+            var pages = 0
+            val outcome = runCatching {
+                LabelPrintJob(appContext, adapter).run(file, settings) { done, total ->
+                    pages = total
+                    if (done == 0) return@run
+                    main.post {
+                        progressBar.isIndeterminate = false
+                        progressBar.max = total
+                        progressBar.progress = done
+                        progressText.text = getString(R.string.printing_pages, done, total)
+                    }
+                }
+            }
+            main.post {
+                if (isDestroyed) return@post
+                busy = false
+                progressRow.visibility = View.GONE
+                updateSelection()
+                outcome.onSuccess {
+                    Toast.makeText(this, getString(R.string.printed, CropJob.plural(pages, "label"), settings.name), Toast.LENGTH_SHORT).show()
+                }.onFailure { e ->
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.print_failed_title)
+                        .setMessage((e.message ?: e.toString()) + getString(R.string.print_failed_hint))
+                        .setPositiveButton(android.R.string.ok, null)
+                        .setNeutralButton(R.string.printer_settings) { _, _ -> showPrinterSettings() }
+                        .show()
+                }
+            }
+        }
+    }
+
+    // --- Printer setup -------------------------------------------------------
+
+    /**
+     * Asks for the printer, then the label size, and saves both. With a [file], the picker
+     * also offers the Android print dialog for printers that have a print service.
+     */
+    private fun setUpPrinter(file: File?, then: ((PrinterSettings) -> Unit)? = null) {
+        val adapter = bluetoothAdapter() ?: return
+        PrinterPicker(
+            this, adapter, canScan(),
+            onPicked = { address, name ->
+                chooseLabelSize { size ->
+                    val previous = savedPrinter()
+                    val settings = PrinterSettings(address, name, size, previous?.language ?: PrinterLanguage.TSPL)
+                    savePrinter(settings)
+                    then?.invoke(settings)
+                }
+            },
+            onSystemPrint = file?.let { { systemPrint(it) } },
+        ).show()
+    }
+
+    private fun chooseLabelSize(onChosen: (LabelSize) -> Unit) {
+        val sizes = LabelSize.entries
+        val current = savedPrinter()?.labelSize ?: LabelSize.L4X6
+        var choice = sizes.indexOf(current)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.choose_label_size)
+            .setSingleChoiceItems(sizes.map { it.title }.toTypedArray(), choice) { _, which -> choice = which }
+            .setPositiveButton(android.R.string.ok) { _, _ -> onChosen(sizes[choice]) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseLanguage(onChosen: (PrinterLanguage) -> Unit) {
+        val languages = PrinterLanguage.entries
+        val names = arrayOf(getString(R.string.language_tspl), getString(R.string.language_escpos))
+        var choice = languages.indexOf(savedPrinter()?.language ?: PrinterLanguage.TSPL)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.choose_language)
+            .setSingleChoiceItems(names, choice) { _, which -> choice = which }
+            .setPositiveButton(android.R.string.ok) { _, _ -> onChosen(languages[choice]) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showPrinterSettings() {
+        val saved = savedPrinter()
+        if (saved == null) {
+            withBluetooth { setUpPrinter(null) }
+            return
+        }
+        val items = arrayOf(
+            getString(R.string.printer_change),
+            getString(R.string.choose_label_size) + ": " + saved.labelSize.title,
+            getString(R.string.choose_language) + ": " + saved.language.name.replace('_', '/'),
+            getString(R.string.printer_forget),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(saved.name)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> withBluetooth { setUpPrinter(null) }
+                    1 -> chooseLabelSize { savePrinter(PrinterSettings(saved.address, saved.name, it, saved.language)) }
+                    2 -> chooseLanguage { savePrinter(PrinterSettings(saved.address, saved.name, saved.labelSize, it)) }
+                    3 -> {
+                        prefs().edit().remove(PREF_PRINTER_ADDRESS).apply()
+                        updatePrinterRow()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun updatePrinterRow() {
+        val saved = savedPrinter()
+        printerRow.text = if (saved == null) {
+            getString(R.string.printer_row_none)
+        } else {
+            getString(R.string.printer_row, saved.name, saved.labelSize.title.substringBefore(" ("))
+        }
+    }
+
+    private fun savedPrinter(): PrinterSettings? {
+        val p = prefs()
+        val address = p.getString(PREF_PRINTER_ADDRESS, null) ?: return null
+        return PrinterSettings(
+            address,
+            p.getString(PREF_PRINTER_NAME, null) ?: address,
+            runCatching { LabelSize.valueOf(p.getString(PREF_LABEL_SIZE, null)!!) }.getOrDefault(LabelSize.L4X6),
+            runCatching { PrinterLanguage.valueOf(p.getString(PREF_PRINTER_LANGUAGE, null)!!) }.getOrDefault(PrinterLanguage.TSPL),
+        )
+    }
+
+    private fun savePrinter(s: PrinterSettings) {
+        prefs().edit()
+            .putString(PREF_PRINTER_ADDRESS, s.address)
+            .putString(PREF_PRINTER_NAME, s.name)
+            .putString(PREF_LABEL_SIZE, s.labelSize.name)
+            .putString(PREF_PRINTER_LANGUAGE, s.language.name)
+            .apply()
+        updatePrinterRow()
+    }
+
+    // --- Bluetooth access ----------------------------------------------------
+
+    /** Action waiting on a permission prompt or the "turn on Bluetooth" prompt. */
+    private var pendingBluetooth: (() -> Unit)? = null
+
+    private fun bluetoothAdapter(): BluetoothAdapter? {
+        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        if (adapter == null) Toast.makeText(this, R.string.bluetooth_missing, Toast.LENGTH_LONG).show()
+        return adapter
+    }
+
+    private fun bluetoothPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+    private fun granted(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun canScan() =
+        granted(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Manifest.permission.BLUETOOTH_SCAN else Manifest.permission.ACCESS_FINE_LOCATION)
+
+    private fun canConnect() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || granted(Manifest.permission.BLUETOOTH_CONNECT)
+
+    /** Whether the optional scan/location permission was already asked for this session. */
+    private var askedScanPermission = false
+
+    /** Runs [action] once Bluetooth permissions are granted and Bluetooth is on. */
+    private fun withBluetooth(action: () -> Unit) {
+        bluetoothAdapter() ?: return
+        val missing = bluetoothPermissions().filterNot(::granted)
+        // Connecting is essential; scanning (location, on Android 11 and older) only adds nearby
+        // unpaired printers to the list, so don't keep nagging for it once declined.
+        if (missing.isNotEmpty() && (!canConnect() || !askedScanPermission)) {
+            askedScanPermission = true
+            pendingBluetooth = { withBluetoothGranted(action) }
+            requestPermissions(missing.toTypedArray(), REQ_BLUETOOTH_PERMISSIONS)
+            return
+        }
+        withBluetoothGranted(action)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun withBluetoothGranted(action: () -> Unit) {
+        val adapter = bluetoothAdapter() ?: return
+        if (!canConnect()) {
+            Toast.makeText(this, R.string.bluetooth_denied, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!adapter.isEnabled) {
+            pendingBluetooth = action
+            startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQ_BLUETOOTH_ON)
+            return
+        }
+        action()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_BLUETOOTH_PERMISSIONS) return
+        pendingBluetooth?.also { pendingBluetooth = null }?.invoke()
     }
 
     @Deprecated("Framework Activity API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_BLUETOOTH_ON) {
+            val action = pendingBluetooth
+            pendingBluetooth = null
+            if (resultCode == RESULT_OK) action?.invoke()
+            return
+        }
         if (resultCode != RESULT_OK || data == null) return
         when (requestCode) {
             REQ_PICK -> {
@@ -362,6 +600,12 @@ class MainActivity : Activity() {
     companion object {
         private const val REQ_PICK = 1
         private const val REQ_SAVE = 2
+        private const val REQ_BLUETOOTH_ON = 3
+        private const val REQ_BLUETOOTH_PERMISSIONS = 4
         private const val PREF_PLATFORM = "platform"
+        private const val PREF_PRINTER_ADDRESS = "printer_address"
+        private const val PREF_PRINTER_NAME = "printer_name"
+        private const val PREF_LABEL_SIZE = "label_size"
+        private const val PREF_PRINTER_LANGUAGE = "printer_language"
     }
 }

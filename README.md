@@ -15,6 +15,15 @@ Pick PDFs in the app, or use **Share → Label Cropper** from the seller app,
 Files or WhatsApp. Each output has **Save**, **Share** and **Print**.
 Requires Android 8.0+.
 
+**Print** sends the labels straight to a Bluetooth thermal label printer
+(e.g. SEZNIK Shakti), the way FlashLabel-style apps do, with no print
+service needed. The first time, pick the printer and the label size loaded
+in it; after that one tap prints. Each page becomes one label, turned to
+match the label and scaled to fit. Classic Bluetooth (SPP) and BLE printers
+are both supported, and TSPL (default) or ESC/POS commands. Tap the
+*Printer:* line under the results to change printer, label size or
+language. *Other printers* in the picker opens the Android print dialog.
+
 ## Build
 
 Open this folder in Android Studio and press **Run**, or from a terminal:
