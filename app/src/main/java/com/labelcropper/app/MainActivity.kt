@@ -354,6 +354,16 @@ class MainActivity : Activity() {
                     listOf(labelsCard, invoicesCard).filter { it.file == file }.forEach { it.markPrinted() }
                     if (outputs.isNotEmpty() && printed.containsAll(outputs)) cleanUpAfterPrinting()
                 }.onFailure { e ->
+                    if (e is PrinterNotActiveException) {
+                        AlertDialog.Builder(this)
+                            .setTitle(R.string.printer_not_active_title)
+                            .setMessage(getString(R.string.printer_not_active, settings.name))
+                            .setPositiveButton(R.string.try_again) { _, _ -> print(file) }
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setNeutralButton(R.string.printer_settings) { _, _ -> showPrinterSettings() }
+                            .show()
+                        return@post
+                    }
                     AlertDialog.Builder(this)
                         .setTitle(R.string.print_failed_title)
                         .setMessage((e.message ?: e.toString()) + getString(R.string.print_failed_hint))

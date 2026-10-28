@@ -40,6 +40,9 @@
     <string name="cleaned_up_partly">All printed. %1$s couldn\'t be deleted (the app it came from doesn\'t allow it); delete them by hand.</string>
     <string name="print_failed_title">Couldn\'t print</string>
     <string name="print_failed_hint">\n\nIf labels come out blank or as text, open Printer settings and switch the printer language.</string>
+    <string name="printer_not_active_title">Printer is not active</string>
+    <string name="printer_not_active">Couldn\'t reach %1$s. Make sure the printer is switched on, charged and nearby, and not connected to another phone, then try again.</string>
+    <string name="try_again">Try again</string>
     <string name="printer_settings">Printer settings</string>
     <string name="bluetooth_missing">This device has no Bluetooth.</string>
     <string name="bluetooth_denied">Bluetooth permission is needed to print to the label printer.</string>

@@ -16,6 +16,9 @@ import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
+/** The printer couldn't be reached at all: it's off, asleep, out of range or connected elsewhere. */
+class PrinterNotActiveException(message: String) : IOException(message)
+
 /** A byte pipe to a printer. Blocking; use off the main thread. */
 interface PrinterConnection : Closeable {
     fun write(data: ByteArray)
@@ -46,7 +49,7 @@ object BluetoothPrinter {
                 errors += "BLE: ${e.message}"
             }
         }
-        throw IOException("Couldn't connect to ${device.name ?: address}. Make sure the printer is on and nearby. (${errors.joinToString("; ")})")
+        throw PrinterNotActiveException("Couldn't connect to ${device.name ?: address} (${errors.joinToString("; ")})")
     }
 }
 
