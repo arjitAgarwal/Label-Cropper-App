@@ -18,6 +18,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.print.PrintManager
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.view.View
 import android.view.WindowInsets
@@ -48,6 +49,14 @@ class MainActivity : Activity() {
     private lateinit var printerRow: TextView
 
     private val selected = mutableListOf<Uri>()
+
+    /** The PDFs the shown results were cropped from, and copies of the results saved with Save. */
+    private var croppedFrom = listOf<Uri>()
+    private val savedCopies = mutableListOf<Uri>()
+
+    /** Output files on screen, and those already printed; once all are printed, everything is cleaned up. */
+    private var outputs = listOf<File>()
+    private val printed = mutableSetOf<File>()
     private var platform = Platform.MEESHO
     private var busy = false
 
@@ -167,6 +176,7 @@ class MainActivity : Activity() {
         progressText.setText(R.string.progress_reading)
 
         val uris = selected.toList()
+        croppedFrom = uris
         val chosen = platform
         val appContext = applicationContext
         worker.execute {
@@ -194,6 +204,9 @@ class MainActivity : Activity() {
         results.visibility = View.VISIBLE
         summary.text = r.summary
         summary.setTextColor(getColor(R.color.ink))
+        outputs = listOfNotNull(r.labels.file, r.invoices?.file)
+        printed.clear()
+        savedCopies.clear()
 
         when (r.platform) {
             Platform.MEESHO -> {
@@ -242,12 +255,16 @@ class MainActivity : Activity() {
         private val save: Button = view.findViewById(R.id.output_save)
         private val share: Button = view.findViewById(R.id.output_share)
         private val print: Button = view.findViewById(R.id.output_print)
+        var file: File? = null
+            private set
 
         /** Shows the card; with a null [file] the buttons are greyed out. */
         fun bind(label: String, file: File?) {
+            this.file = file
             view.visibility = View.VISIBLE
             title.text = label
             title.isEnabled = file != null
+            print.setText(R.string.print)
             for (b in listOf(save, share, print)) b.isEnabled = file != null
             if (file == null) return
             save.setOnClickListener { saveAs(file) }
@@ -255,7 +272,14 @@ class MainActivity : Activity() {
             print.setOnClickListener { print(file) }
         }
 
+        /** Greys out Print so an accidental second tap can't print the labels again. */
+        fun markPrinted() {
+            print.isEnabled = false
+            print.setText(R.string.printed_button)
+        }
+
         fun hide() {
+            file = null
             view.visibility = View.GONE
         }
     }
@@ -326,6 +350,9 @@ class MainActivity : Activity() {
                 updateSelection()
                 outcome.onSuccess {
                     Toast.makeText(this, getString(R.string.printed, CropJob.plural(pages, "label"), settings.name), Toast.LENGTH_SHORT).show()
+                    printed += file
+                    listOf(labelsCard, invoicesCard).filter { it.file == file }.forEach { it.markPrinted() }
+                    if (outputs.isNotEmpty() && printed.containsAll(outputs)) cleanUpAfterPrinting()
                 }.onFailure { e ->
                     AlertDialog.Builder(this)
                         .setTitle(R.string.print_failed_title)
@@ -337,6 +364,43 @@ class MainActivity : Activity() {
             }
         }
     }
+
+    /**
+     * Everything has been printed: delete the original PDFs, any copies saved with Save and
+     * the app's own cropped files, then reset the screen for the next batch.
+     */
+    private fun cleanUpAfterPrinting() {
+        val docs = croppedFrom + savedCopies
+        croppedFrom = emptyList()
+        savedCopies.clear()
+        outputs = emptyList()
+        printed.clear()
+        selected.clear()
+        results.visibility = View.GONE
+        labelsCard.hide()
+        invoicesCard.hide()
+        updateSelection()
+
+        val appContext = applicationContext
+        worker.execute {
+            val failed = docs.count { !deleteDocument(it) }
+            OutputProvider.outputDir(appContext).deleteRecursively()
+            main.post {
+                if (isDestroyed) return@post
+                val message = if (failed == 0) {
+                    getString(R.string.cleaned_up, CropJob.plural(docs.size, "file"))
+                } else {
+                    getString(R.string.cleaned_up_partly, CropJob.plural(failed, "file"))
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Deletes a picked or saved document. Files shared in by some apps can't be deleted. */
+    private fun deleteDocument(uri: Uri): Boolean = runCatching {
+        DocumentsContract.isDocumentUri(this, uri) && DocumentsContract.deleteDocument(contentResolver, uri)
+    }.getOrDefault(false) || runCatching { contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
 
     // --- Printer setup -------------------------------------------------------
 
@@ -533,11 +597,14 @@ class MainActivity : Activity() {
                 val src = pendingSave ?: return
                 val dest = data.data ?: return
                 pendingSave = null
+                // Recorded up front so a clean-up queued behind this save still removes the copy.
+                savedCopies += dest
                 worker.execute {
                     val ok = runCatching {
                         contentResolver.openOutputStream(dest, "wt")!!.use { out -> src.inputStream().use { it.copyTo(out) } }
                     }.isSuccess
                     main.post {
+                        if (!ok) savedCopies -= dest
                         Toast.makeText(this, if (ok) R.string.saved else R.string.save_failed, Toast.LENGTH_SHORT).show()
                     }
                 }

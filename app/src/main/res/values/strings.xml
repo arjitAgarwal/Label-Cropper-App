@@ -35,6 +35,9 @@
     <string name="printing_connecting">Connecting to %1$s…</string>
     <string name="printing_pages">Sending label %1$d of %2$d to the printer…</string>
     <string name="printed">Sent %1$s to %2$s</string>
+    <string name="printed_button">Printed</string>
+    <string name="cleaned_up">All printed. Deleted %1$s (originals and saved copies).</string>
+    <string name="cleaned_up_partly">All printed. %1$s couldn\'t be deleted (the app it came from doesn\'t allow it); delete them by hand.</string>
     <string name="print_failed_title">Couldn\'t print</string>
     <string name="print_failed_hint">\n\nIf labels come out blank or as text, open Printer settings and switch the printer language.</string>
     <string name="printer_settings">Printer settings</string>
