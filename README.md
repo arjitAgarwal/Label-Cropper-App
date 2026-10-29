@@ -3,9 +3,9 @@
 Android version of the desktop Label Cropper. Crops Meesho and Flipkart
 shipping-label PDFs for a label printer, entirely on the phone.
 
-- **Meesho**: each page's label (address, barcode, Product Details and the
-  Bill of Supply bar) and invoice (from Bill To / Ship To down) are placed
-  side by side on a 5×3in page.
+- **Meesho**: two files. *Labels* (address, barcode, Product Details and
+  the Bill of Supply bar), one per 5×3in page. *Invoices* (from Bill To /
+  Ship To down), merged two per A4 page with a dashed cut guide.
 - **Flipkart**: two files. *Labels*, each cropped tight onto its own
   ~3×5in page. *Invoices*, every Tax Invoice found below a label, merged
   two per A4 page with a dashed cut guide. The Invoices buttons are greyed

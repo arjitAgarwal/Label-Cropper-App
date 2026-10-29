@@ -50,7 +50,12 @@ class CropJob(private val context: Context) {
             }
             val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
             return when (platform) {
-                Platform.MEESHO -> meesho(sources, File(outDir, "meesho_labels_$stamp.pdf"), progress)
+                Platform.MEESHO -> meesho(
+                    sources,
+                    File(outDir, "meesho_labels_$stamp.pdf"),
+                    File(outDir, "meesho_invoices_$stamp.pdf"),
+                    progress,
+                )
                 Platform.FLIPKART -> flipkart(
                     sources,
                     File(outDir, "flipkart_labels_$stamp.pdf"),
@@ -64,17 +69,28 @@ class CropJob(private val context: Context) {
         }
     }
 
-    private fun meesho(sources: List<PageSource>, out: File, progress: LabelCropper.Progress): CropResult {
-        val r = out.outputStream().use { LabelCropper.cropMeesho(sources, it, progress) }
-        if (r.pageCount == 0) {
-            out.delete()
+    private fun meesho(sources: List<PageSource>, labelsFile: File, invoicesFile: File, progress: LabelCropper.Progress): CropResult {
+        val r = labelsFile.outputStream().use { labelsOut ->
+            invoicesFile.outputStream().use { invoicesOut ->
+                LabelCropper.cropMeesho(sources, labelsOut, invoicesOut, progress)
+            }
+        }
+        if (r.labelPages == 0) {
+            labelsFile.delete()
+            invoicesFile.delete()
             throw NothingCroppedException()
         }
         val warnings = mutableListOf<String>()
         if (r.skipped.isNotEmpty()) {
             warnings += "Couldn't detect the label layout on: ${r.skipped.joinToString()}. Those page(s) were skipped."
         }
-        return CropResult(Platform.MEESHO, Output(out, r.pageCount), null, "${plural(r.pageCount, "page")} cropped (Meesho).", warnings)
+        return CropResult(
+            Platform.MEESHO,
+            Output(labelsFile, r.labelPages),
+            Output(invoicesFile, r.invoicePages),
+            "Meesho: ${plural(r.labelPages, "label")} and ${plural(r.labelPages, "invoice")} cropped.",
+            warnings,
+        )
     }
 
     private fun flipkart(sources: List<PageSource>, labelsFile: File, invoicesFile: File, progress: LabelCropper.Progress): CropResult {

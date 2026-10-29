@@ -29,7 +29,7 @@ Everything here is JVM-testable. The pipeline:
 
 1. A `PageSource` renders each page to a `GrayImage` at `LabelCropper.RENDER_DPI` (300).
 2. Layout detection works on **rendered pixels**, not PDF vector data, because `PdfRenderer` can't expose vectors. `MeeshoLayout` finds full-width horizontal rules and anchors the label/invoice split on the shaded "Bill of Supply" bar. `FlipkartLayout` works on an `InkMask` and finds the dashed cut line between the label and the Tax Invoice.
-3. `LabelCropper.cropMeesho` / `cropFlipkart` place the crops on fixed output pages (Meesho: label + invoice side by side on 5×3in; Flipkart: labels ~3×5in, invoices 2-up on A4). `RenderedPage.crop` re-renders the region at its output size rather than downsampling the 300 DPI page, to keep small text sharp.
+3. `LabelCropper.cropMeesho` / `cropFlipkart` each write a labels PDF and an invoices PDF on fixed output pages (Meesho labels 5×3in, Flipkart labels ~3×5in; invoices for both are stacked 2-up on A4 by `InvoiceSheets`). `RenderedPage.crop` re-renders the region at its output size rather than downsampling the 300 DPI page, to keep small text sharp.
 4. `PdfImageWriter` writes **image-only** PDFs, streamed page by page. Output is rasterized on purpose: some label-printer drivers garble embedded fonts.
 
 `ThermalCommands` encodes 1-bit `MonoImage`s as TSPL (default) or ESC/POS for direct Bluetooth printing. TSPL's `BITMAP` prints **0** bits, so data is inverted relative to `MonoImage` (where set = black).

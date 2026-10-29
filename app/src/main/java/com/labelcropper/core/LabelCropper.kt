@@ -33,7 +33,7 @@ object LabelCropper {
     /** Crops are never stored above this resolution at their placed size on the output page. */
     const val OUTPUT_DPI = 300.0
 
-    // Meesho: label and invoice side by side on a 5x3in landscape page.
+    // Meesho labels: one per 5x3in landscape page.
     const val MEESHO_PAGE_W = 5.0 * 72
     const val MEESHO_PAGE_H = 3.0 * 72
     const val MEESHO_MARGIN = 6.0
@@ -42,13 +42,13 @@ object LabelCropper {
     const val FLIPKART_PAGE_W = 219.0
     const val FLIPKART_PAGE_H = 357.0
 
-    // Flipkart invoices: two per A4 portrait page, stacked.
+    // Invoices (both platforms): two per A4 portrait page, stacked.
     const val INVOICE_PAGE_W = 595.0
     const val INVOICE_PAGE_H = 842.0
     const val INVOICE_MARGIN = 18.0
     const val INVOICE_GAP = 10.0
 
-    class MeeshoResult(val pageCount: Int, val skipped: List<String>)
+    class MeeshoResult(val labelPages: Int, val invoicePages: Int, val skipped: List<String>)
 
     class FlipkartResult(
         val labelPages: Int,
@@ -63,37 +63,44 @@ object LabelCropper {
         fun update(done: Int, total: Int)
     }
 
-    fun cropMeesho(sources: List<PageSource>, out: OutputStream, progress: Progress = Progress { _, _ -> }): MeeshoResult {
-        val pw = MEESHO_PAGE_W
-        val ph = MEESHO_PAGE_H
+    /**
+     * Writes each page's label to [labelsOut] and its Bill of Supply invoice
+     * (merged two per A4 page) to [invoicesOut], in one pass.
+     */
+    fun cropMeesho(
+        sources: List<PageSource>,
+        labelsOut: OutputStream,
+        invoicesOut: OutputStream,
+        progress: Progress = Progress { _, _ -> },
+    ): MeeshoResult {
         val m = MEESHO_MARGIN
-        val half = pw / 2
-        val leftZone = PtRect(m, m, half - m / 2, ph - m)
-        val rightZone = PtRect(half + m / 2, m, pw - m, ph - m)
+        val labelZone = PtRect(m, m, MEESHO_PAGE_W - m, MEESHO_PAGE_H - m)
 
         val skipped = mutableListOf<String>()
         val total = sources.sumOf { it.pageCount }
         var done = 0
-        val writer = PdfImageWriter(out)
-        writer.use {
-            for (src in sources) {
-                for (i in 0 until src.pageCount) {
-                    src.renderPage(i).use { page ->
-                        val split = MeeshoLayout.findSplit(page.gray, RENDER_ZOOM)
-                        if (split == null) {
-                            skipped += "${src.name} page ${i + 1}"
-                        } else {
-                            writer.addPage(
-                                pw, ph,
-                                listOf(place(page, split.label, leftZone), place(page, split.invoice, rightZone)),
-                            )
+        val labels = PdfImageWriter(labelsOut)
+        val invoices = InvoiceSheets(invoicesOut)
+        labels.use {
+            invoices.use {
+                for (src in sources) {
+                    for (i in 0 until src.pageCount) {
+                        src.renderPage(i).use { page ->
+                            val split = MeeshoLayout.findSplit(page.gray, RENDER_ZOOM)
+                            if (split == null) {
+                                skipped += "${src.name} page ${i + 1}"
+                            } else {
+                                labels.addPage(MEESHO_PAGE_W, MEESHO_PAGE_H, listOf(place(page, split.label, labelZone)))
+                                invoices.add(page, split.invoice)
+                            }
                         }
+                        progress.update(++done, total)
                     }
-                    progress.update(++done, total)
                 }
+                invoices.finish()
             }
         }
-        return MeeshoResult(writer.pageCount, skipped)
+        return MeeshoResult(labels.pageCount, invoices.pageCount, skipped)
     }
 
     /**
@@ -108,25 +115,14 @@ object LabelCropper {
     ): FlipkartResult {
         val labelZone = PtRect(0.0, 0.0, FLIPKART_PAGE_W, FLIPKART_PAGE_H)
 
-        val iw = INVOICE_PAGE_W
-        val ih = INVOICE_PAGE_H
-        val im = INVOICE_MARGIN
-        val halfH = ih / 2
-        val invoiceZones = listOf(
-            PtRect(im, im, iw - im, halfH - INVOICE_GAP / 2),
-            PtRect(im, halfH + INVOICE_GAP / 2, iw - im, ih - im),
-        )
-        val cutGuide = PdfImageWriter.DashedLine(im, halfH, iw - im, halfH, gray = 0.6, width = 0.75, dash = 2.0)
-
         val skippedLabels = mutableListOf<String>()
         val skippedInvoices = mutableListOf<String>()
         var invoicesFound = 0
-        var pendingInvoice: PdfImageWriter.Placement? = null
         val total = sources.sumOf { it.pageCount }
         var done = 0
 
         val labels = PdfImageWriter(labelsOut)
-        val invoices = PdfImageWriter(invoicesOut)
+        val invoices = InvoiceSheets(invoicesOut)
         labels.use {
             invoices.use {
                 for (src in sources) {
@@ -146,22 +142,50 @@ object LabelCropper {
                                 skippedInvoices += "${src.name} page ${i + 1}"
                             } else {
                                 invoicesFound++
-                                val first = pendingInvoice
-                                if (first == null) {
-                                    pendingInvoice = place(page, invoiceBox, invoiceZones[0])
-                                } else {
-                                    invoices.addPage(iw, ih, listOf(first, place(page, invoiceBox, invoiceZones[1])), listOf(cutGuide))
-                                    pendingInvoice = null
-                                }
+                                invoices.add(page, invoiceBox)
                             }
                         }
                         progress.update(++done, total)
                     }
                 }
-                pendingInvoice?.let { invoices.addPage(iw, ih, listOf(it)) }
+                invoices.finish()
             }
         }
         return FlipkartResult(labels.pageCount, invoices.pageCount, invoicesFound, skippedLabels, skippedInvoices)
+    }
+
+    /** Stacks invoice crops two per A4 page, with a dashed cut guide between each pair. */
+    private class InvoiceSheets(out: OutputStream) : Closeable {
+        private val writer = PdfImageWriter(out)
+        private val halfH = INVOICE_PAGE_H / 2
+        private val zones = listOf(
+            PtRect(INVOICE_MARGIN, INVOICE_MARGIN, INVOICE_PAGE_W - INVOICE_MARGIN, halfH - INVOICE_GAP / 2),
+            PtRect(INVOICE_MARGIN, halfH + INVOICE_GAP / 2, INVOICE_PAGE_W - INVOICE_MARGIN, INVOICE_PAGE_H - INVOICE_MARGIN),
+        )
+        private val cutGuide = PdfImageWriter.DashedLine(
+            INVOICE_MARGIN, halfH, INVOICE_PAGE_W - INVOICE_MARGIN, halfH, gray = 0.6, width = 0.75, dash = 2.0,
+        )
+        private var pending: PdfImageWriter.Placement? = null
+
+        val pageCount: Int get() = writer.pageCount
+
+        fun add(page: RenderedPage, rect: PixelRect) {
+            val first = pending
+            if (first == null) {
+                pending = place(page, rect, zones[0])
+            } else {
+                writer.addPage(INVOICE_PAGE_W, INVOICE_PAGE_H, listOf(first, place(page, rect, zones[1])), listOf(cutGuide))
+                pending = null
+            }
+        }
+
+        /** Writes an unpaired last invoice on a page of its own. */
+        fun finish() {
+            pending?.let { writer.addPage(INVOICE_PAGE_W, INVOICE_PAGE_H, listOf(it)) }
+            pending = null
+        }
+
+        override fun close() = writer.close()
     }
 
     /** Fits [rect] of [page] into [zone] and crops it at no more than [OUTPUT_DPI] for its placed size. */

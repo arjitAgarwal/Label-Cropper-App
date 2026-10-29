@@ -210,14 +210,15 @@ class MainActivity : Activity() {
 
         when (r.platform) {
             Platform.MEESHO -> {
-                labelsCard.bind(getString(R.string.out_meesho, CropJob.plural(r.labels.pageCount, "page")), r.labels.file)
-                invoicesCard.hide()
+                labelsCard.bind(getString(R.string.out_meesho_labels, CropJob.plural(r.labels.pageCount, "page")), r.labels.file)
+                val inv = r.invoices!!
+                invoicesCard.bind(getString(R.string.out_invoices, CropJob.plural(inv.pageCount, "page")), inv.file)
             }
             Platform.FLIPKART -> {
                 labelsCard.bind(getString(R.string.out_flipkart_labels, CropJob.plural(r.labels.pageCount, "page")), r.labels.file)
                 val inv = r.invoices
                 if (inv?.file != null) {
-                    invoicesCard.bind(getString(R.string.out_flipkart_invoices, CropJob.plural(inv.pageCount, "page")), inv.file)
+                    invoicesCard.bind(getString(R.string.out_invoices,CropJob.plural(inv.pageCount, "page")), inv.file)
                 } else {
                     invoicesCard.bind(getString(R.string.out_flipkart_no_invoices), null)
                 }

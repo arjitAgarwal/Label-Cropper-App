@@ -183,8 +183,11 @@ class LabelCropperTest {
 
         outDir?.let { out ->
             out.mkdirs()
-            val r = File(out, "meesho.pdf").outputStream().use { LabelCropper.cropMeesho(listOf(src), it) }
-            assertEquals(9, r.pageCount)
+            val r = File(out, "meesho_labels.pdf").outputStream().use { l ->
+                File(out, "meesho_invoices.pdf").outputStream().use { inv -> LabelCropper.cropMeesho(listOf(src), l, inv) }
+            }
+            assertEquals(9, r.labelPages)
+            assertEquals(5, r.invoicePages)
             assertTrue(r.skipped.isEmpty())
         }
     }
